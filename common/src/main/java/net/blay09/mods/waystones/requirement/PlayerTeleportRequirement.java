@@ -7,7 +7,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Item;
 
 import java.util.List;
 
@@ -28,15 +28,17 @@ public class PlayerTeleportRequirement implements WarpRequirement {
 
     @Override
     public boolean canAfford(Player player) {
+        final var requiredItem = config.getCostItem().orElse(null);
+
         // 检查是否需要消耗经验
         if (config.xpCost > 0 && !player.getAbilities().instabuild) {
             return player.experienceLevel >= config.xpCost;
         }
 
         // 检查是否需要消耗物品
-        if (!config.costItem.isEmpty()) {
-            ItemStack heldItem = player.getMainHandItem();
-            if (!ItemStack.isSameItemSameComponents(heldItem, config.costItem)) {
+        if (requiredItem != null) {
+            final var heldItem = player.getMainHandItem();
+            if (!heldItem.is(requiredItem)) {
                 return false;
             }
         }
@@ -46,15 +48,17 @@ public class PlayerTeleportRequirement implements WarpRequirement {
 
     @Override
     public void consume(Player player) {
+        final var requiredItem = config.getCostItem().orElse(null);
+
         // 消耗经验
         if (config.xpCost > 0 && !player.getAbilities().instabuild) {
             player.giveExperienceLevels(-config.xpCost);
         }
 
         // 消耗物品（如果配置了）
-        if (!config.costItem.isEmpty() && config.consumeItem) {
-            ItemStack heldItem = player.getMainHandItem();
-            if (ItemStack.isSameItemSameComponents(heldItem, config.costItem)) {
+        if (requiredItem != null && config.consumeItem) {
+            final var heldItem = player.getMainHandItem();
+            if (heldItem.is(requiredItem)) {
                 heldItem.shrink(1);
             }
         }
@@ -72,6 +76,8 @@ public class PlayerTeleportRequirement implements WarpRequirement {
 
     @Override
     public void appendHoverText(Player player, List<Component> tooltip) {
+        final var requiredItem = config.getCostItem().orElse(null);
+
         // 添加经验成本提示
         if (config.xpCost > 0) {
             tooltip.add(Component.translatable("gui.waystones.player_selection.xp_cost", config.xpCost)
@@ -79,9 +85,9 @@ public class PlayerTeleportRequirement implements WarpRequirement {
         }
 
         // 添加物品成本提示
-        if (!config.costItem.isEmpty()) {
+        if (requiredItem != null) {
             tooltip.add(Component.translatable("gui.waystones.player_selection.item_cost",
-                            config.costItem.getHoverName())
+                            requiredItem.getDefaultInstance().getHoverName())
                     .withStyle(ChatFormatting.GREEN));
         }
 
@@ -108,6 +114,6 @@ public class PlayerTeleportRequirement implements WarpRequirement {
 
     @Override
     public boolean isEmpty() {
-        return config.xpCost <= 0 && config.costItem.isEmpty();
+        return config.xpCost <= 0 && config.getCostItem().isEmpty();
     }
 }

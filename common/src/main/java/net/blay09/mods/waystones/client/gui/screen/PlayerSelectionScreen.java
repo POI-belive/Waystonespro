@@ -226,9 +226,10 @@ public class PlayerSelectionScreen extends AbstractContainerScreen<PlayerSelecti
                 tooltip.add(Component.translatable("gui.waystones.player_selection.xp_cost", config.xpCost)
                         .withStyle(ChatFormatting.GREEN));
             }
-            if (!config.costItem.isEmpty()) {
+            final var requiredItem = config.getCostItem().orElse(null);
+            if (requiredItem != null) {
                 tooltip.add(Component.translatable("gui.waystones.player_selection.item_cost",
-                        config.costItem.getHoverName()).withStyle(ChatFormatting.GREEN));
+                        requiredItem.getDefaultInstance().getHoverName()).withStyle(ChatFormatting.GREEN));
             }
             if (config.cooldownSeconds > 0) {
                 String cooldownText = formatCooldown(config.cooldownSeconds);

@@ -3,17 +3,14 @@ package net.blay09.mods.waystones.item;
 import net.blay09.mods.balm.Balm;
 import net.blay09.mods.balm.world.BalmMenuProvider;
 import net.blay09.mods.waystones.api.PlayerInfo;
-import net.blay09.mods.waystones.config.WaystonesConfig;
 import net.blay09.mods.waystones.menu.ModMenus;
 import net.blay09.mods.waystones.menu.PlayerSelectionMenu;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -26,7 +23,6 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -35,6 +31,10 @@ import java.util.stream.Collectors;
  * 玩家传送物品 - 允许玩家传送到其他在线玩家
  */
 public class PlayerCallItem extends Item {
+
+    public static final UUID MOCK_OVERWORLD_NEAR_UUID = UUID.fromString("11111111-1111-1111-1111-111111111111");
+    public static final UUID MOCK_OVERWORLD_FAR_UUID = UUID.fromString("22222222-2222-2222-2222-222222222222");
+    public static final UUID MOCK_NETHER_UUID = UUID.fromString("33333333-3333-3333-3333-333333333333");
 
     public PlayerCallItem(Properties properties) {
         super(properties);
@@ -60,7 +60,14 @@ public class PlayerCallItem extends Item {
 
                 @Override
                 public AbstractContainerMenu createMenu(int windowId, Inventory playerInventory, Player player) {
-                    return PlayerSelectionMenu.fromServerPlayers(ModMenus.playerSelection.value(), windowId, onlinePlayers)
+                    List<PlayerInfo> playerInfos = onlinePlayers.stream()
+                            .map(p -> new PlayerInfo(p.getUUID(), p.getName().getString(), p.level().dimension(), p.blockPosition(), false))
+                            .collect(Collectors.toList());
+                    if (playerInfos.isEmpty() && player instanceof ServerPlayer serverPlayer) {
+                        playerInfos = createMockPlayerInfos(serverPlayer);
+                    }
+
+                    return new PlayerSelectionMenu(ModMenus.playerSelection.value(), windowId, playerInfos)
                             .withWarpItem(itemStack)
                             .withHand(hand);
                 }
@@ -68,48 +75,14 @@ public class PlayerCallItem extends Item {
                 @Override
                 public ModMenus.PlayerSelectionMenuData getScreenOpeningData(ServerPlayer serverPlayer) {
                     List<PlayerInfo> playerInfos = onlinePlayers.stream()
-                            .map(p -> new PlayerInfo(p.getUUID(), p.getName().getString(), p.level().dimension(), p.blockPosition()))
+                            .map(p -> new PlayerInfo(p.getUUID(), p.getName().getString(), p.level().dimension(), p.blockPosition(), false))
                             .collect(Collectors.toList());
 
-                    // 【测试用】如果没有其他玩家，添加一些模拟玩家数据
                     if (playerInfos.isEmpty()) {
-                        playerInfos = getMockPlayerInfos(serverPlayer);
+                        playerInfos = createMockPlayerInfos(serverPlayer);
                     }
 
                     return new ModMenus.PlayerSelectionMenuData(playerInfos, itemStack);
-                }
-
-                /**
-                 * 获取模拟玩家信息列表（仅用于测试UI显示）
-                 */
-                private List<PlayerInfo> getMockPlayerInfos(ServerPlayer currentPlayer) {
-                    List<PlayerInfo> mockPlayers = new ArrayList<>();
-                    ResourceKey<Level> currentDim = currentPlayer.level().dimension();
-                    BlockPos currentPos = currentPlayer.blockPosition();
-
-                    // 添加几个模拟玩家
-                    mockPlayers.add(new PlayerInfo(
-                            UUID.fromString("11111111-1111-1111-1111-111111111111"),
-                            "测试玩家_Alex",
-                            currentDim,
-                            new BlockPos(currentPos.getX() + 10, currentPos.getY(), currentPos.getZ() + 10)
-                    ));
-
-                    mockPlayers.add(new PlayerInfo(
-                            UUID.fromString("22222222-2222-2222-2222-222222222222"),
-                            "测试玩家_Steve",
-                            currentDim,
-                            new BlockPos(currentPos.getX() - 10, currentPos.getY(), currentPos.getZ() - 10)
-                    ));
-
-                    mockPlayers.add(new PlayerInfo(
-                            UUID.fromString("33333333-3333-3333-3333-333333333333"),
-                            "测试玩家_Neo",
-                            currentDim,
-                            new BlockPos(currentPos.getX(), currentPos.getY() + 5, currentPos.getZ() + 20)
-                    ));
-
-                    return mockPlayers;
                 }
 
                 @Override
@@ -135,37 +108,33 @@ public class PlayerCallItem extends Item {
         return List.of();
     }
 
-    /**
-     * 获取模拟玩家信息列表（仅用于测试UI显示）
-     */
-    private List<PlayerInfo> getMockPlayerInfos(ServerPlayer currentPlayer) {
-        List<PlayerInfo> mockPlayers = new ArrayList<>();
-        ResourceKey<Level> currentDim = currentPlayer.level().dimension();
+    public static List<PlayerInfo> createMockPlayerInfos(ServerPlayer currentPlayer) {
         BlockPos currentPos = currentPlayer.blockPosition();
+        final var overworld = Level.OVERWORLD;
+        final var nether = Level.NETHER;
 
-        // 添加几个模拟玩家
-        mockPlayers.add(new PlayerInfo(
-                UUID.fromString("11111111-1111-1111-1111-111111111111"),
-                "测试玩家_Alex",
-                currentDim,
-                new BlockPos(currentPos.getX() + 10, currentPos.getY(), currentPos.getZ() + 10)
+        return List.of(
+                new PlayerInfo(
+                MOCK_OVERWORLD_NEAR_UUID,
+                "测试玩家_Alex_近距离",
+                overworld,
+                new BlockPos(currentPos.getX() + 10, currentPos.getY(), currentPos.getZ() + 10),
+                true
+        ),
+                new PlayerInfo(
+                MOCK_OVERWORLD_FAR_UUID,
+                "测试玩家_Steve_远距离",
+                overworld,
+                new BlockPos(48, Math.max(80, currentPos.getY()), -32),
+                true
+        ),
+                new PlayerInfo(
+                MOCK_NETHER_UUID,
+                "测试玩家_Neo_下界",
+                nether,
+                new BlockPos(0, 80, 0),
+                true
         ));
-
-        mockPlayers.add(new PlayerInfo(
-                UUID.fromString("22222222-2222-2222-2222-222222222222"),
-                "测试玩家_Steve",
-                currentDim,
-                new BlockPos(currentPos.getX() - 10, currentPos.getY(), currentPos.getZ() - 10)
-        ));
-
-        mockPlayers.add(new PlayerInfo(
-                UUID.fromString("33333333-3333-3333-3333-333333333333"),
-                "测试玩家_Neo",
-                currentDim,
-                new BlockPos(currentPos.getX(), currentPos.getY() + 5, currentPos.getZ() + 20)
-        ));
-
-        return mockPlayers;
     }
 
     @Override

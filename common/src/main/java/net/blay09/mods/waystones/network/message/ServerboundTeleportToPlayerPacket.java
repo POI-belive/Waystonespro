@@ -1,23 +1,20 @@
 package net.blay09.mods.waystones.network.message;
 
+import net.blay09.mods.waystones.api.PlayerInfo;
 import net.blay09.mods.waystones.Waystones;
 import net.blay09.mods.waystones.api.TeleportDestination;
-import net.blay09.mods.waystones.api.WaystoneCooldowns;
 import net.blay09.mods.waystones.config.WaystonesConfig;
 import net.blay09.mods.waystones.core.PlayerWaystoneManager;
 import net.blay09.mods.waystones.core.WaystoneTeleportManager;
 import net.blay09.mods.waystones.menu.PlayerSelectionMenu;
 import net.blay09.mods.waystones.requirement.PlayerTeleportRequirement;
 import net.minecraft.ChatFormatting;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -40,14 +37,28 @@ public record ServerboundTeleportToPlayerPacket(UUID targetPlayerUuid) implement
     );
 
     public static void handle(final ServerPlayer player, ServerboundTeleportToPlayerPacket message) {
-        // 检查是否在正确的菜单中
         if (!(player.containerMenu instanceof PlayerSelectionMenu selectionMenu)) {
             return;
         }
 
-        // 查找目标玩家
+        final var targetInfo = selectionMenu.getPlayerInfos().stream()
+                .filter(it -> it.uuid().equals(message.targetPlayerUuid()))
+                .findFirst()
+                .orElse(null);
+        if (targetInfo == null) {
+            Waystones.logger.warn("{} tried to teleport to player {} that was not in the selection menu.",
+                    player.getName().getString(), message.targetPlayerUuid());
+            return;
+        }
+
         var server = player.level().getServer();
         if (server != null) {
+            if (targetInfo.mockTarget()) {
+                teleportToMockTarget(player, targetInfo);
+                player.closeContainer();
+                return;
+            }
+
             ServerPlayer targetPlayer = server.getPlayerList().getPlayer(message.targetPlayerUuid());
             if (targetPlayer == null) {
                 player.sendSystemMessage(Component.translatable("chat.waystones.player_not_found")
@@ -55,18 +66,45 @@ public record ServerboundTeleportToPlayerPacket(UUID targetPlayerUuid) implement
                 return;
             }
 
-            // 执行传送
-            teleportPlayer(player, targetPlayer, selectionMenu);
+            teleportPlayer(player, targetPlayer);
 
             // 关闭菜单
             player.closeContainer();
         }
     }
 
-    /**
-     * 执行玩家到玩家的传送
-     */
-    private static void teleportPlayer(ServerPlayer sourcePlayer, ServerPlayer targetPlayer, PlayerSelectionMenu selectionMenu) {
+    private static void teleportToMockTarget(ServerPlayer sourcePlayer, PlayerInfo targetInfo) {
+        final var server = sourcePlayer.level().getServer();
+        if (server == null) {
+            return;
+        }
+        final var targetLevel = server.getLevel(targetInfo.dimension());
+        if (targetLevel == null) {
+            sourcePlayer.sendSystemMessage(Component.translatable("chat.waystones.player_not_found")
+                    .withStyle(ChatFormatting.RED));
+            return;
+        }
+
+        final var targetPos = targetInfo.position();
+        final var destination = new TeleportDestination(
+                targetLevel,
+                new Vec3(targetPos.getX() + 0.5, targetPos.getY() + 0.5, targetPos.getZ() + 0.5),
+                sourcePlayer.getDirection()
+        );
+
+        teleportPlayer(sourcePlayer, Component.literal(targetInfo.name()), destination);
+    }
+
+    private static void teleportPlayer(ServerPlayer sourcePlayer, ServerPlayer targetPlayer) {
+        final var destination = new TeleportDestination(
+                targetPlayer.level(),
+                new Vec3(targetPlayer.getX(), targetPlayer.getY(), targetPlayer.getZ()),
+                targetPlayer.getDirection()
+        );
+        teleportPlayer(sourcePlayer, targetPlayer.getName(), destination);
+    }
+
+    private static void teleportPlayer(ServerPlayer sourcePlayer, Component targetName, TeleportDestination destination) {
         // 检查冷却时间
         Identifier cooldownKey = Identifier.fromNamespaceAndPath("waystones", "player_call");
         long remainingCooldownMillis = PlayerWaystoneManager.getCooldownMillisLeft(sourcePlayer, cooldownKey);
@@ -78,7 +116,7 @@ public record ServerboundTeleportToPlayerPacket(UUID targetPlayerUuid) implement
         }
 
         // 检查并消耗成本（经验等级）
-        PlayerTeleportRequirement requirement = new PlayerTeleportRequirement(sourcePlayer, targetPlayer);
+        PlayerTeleportRequirement requirement = new PlayerTeleportRequirement(sourcePlayer, null);
         if (!requirement.canAfford(sourcePlayer) && !sourcePlayer.getAbilities().instabuild) {
             sourcePlayer.sendSystemMessage(Component.translatable("chat.waystones.not_enough_xp")
                     .withStyle(ChatFormatting.RED));
@@ -88,18 +126,6 @@ public record ServerboundTeleportToPlayerPacket(UUID targetPlayerUuid) implement
         // 消耗成本
         requirement.consume(sourcePlayer);
 
-        // 创建传送目标
-        Vec3 targetLocation = new Vec3(
-                targetPlayer.getX(),
-                targetPlayer.getY(),
-                targetPlayer.getZ()
-        );
-        ServerLevel targetLevel = targetPlayer.level();
-        Direction direction = targetPlayer.getDirection();
-
-        TeleportDestination destination = new TeleportDestination(targetLevel, targetLocation, direction);
-
-        // 执行传送
         WaystoneTeleportManager.doTeleport(
                 new net.blay09.mods.waystones.core.WaystoneTeleportContextImpl(sourcePlayer, null),
                 destination
@@ -112,15 +138,13 @@ public record ServerboundTeleportToPlayerPacket(UUID targetPlayerUuid) implement
             PlayerWaystoneManager.setCooldownUntil(sourcePlayer, cooldownKey, cooldownUntil);
         }
 
-        // 播放音效
         sourcePlayer.level().playSound(null, sourcePlayer.blockPosition(),
                 SoundEvents.PORTAL_TRAVEL, SoundSource.PLAYERS, 0.1f, 1f);
-        targetPlayer.level().playSound(null, targetPlayer.blockPosition(),
+        destination.level().playSound(null, net.minecraft.core.BlockPos.containing(destination.location()),
                 SoundEvents.PORTAL_TRAVEL, SoundSource.PLAYERS, 0.1f, 1f);
 
-        // 发送成功消息
         sourcePlayer.sendSystemMessage(Component.translatable("chat.waystones.teleported_to_player",
-                        targetPlayer.getName())
+                        targetName)
                 .withStyle(ChatFormatting.GREEN));
     }
 

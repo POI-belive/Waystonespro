@@ -1,4 +1,15 @@
 repositories {
+    maven {
+        name = 'NeoForged Releases'
+        url = 'https://maven.neoforged.net/releases'
+        content {
+            includeGroup 'net.neoforged'
+            includeGroup 'net.minecraftforge'
+            includeGroup 'net.neoforged.installertools'
+            includeGroup 'net.minecraftforge.installertools'
+        }
+    }
+
     // 阿里云镜像 - Maven中央仓库
     maven {
         name = 'Aliyun Maven Central'

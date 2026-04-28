@@ -18,7 +18,8 @@ public record PlayerInfo(
         UUID uuid,
         String name,
         ResourceKey<Level> dimension,
-        BlockPos position
+        BlockPos position,
+        boolean mockTarget
 ) {
     public static final StreamCodec<RegistryFriendlyByteBuf, PlayerInfo> STREAM_CODEC = StreamCodec.of(
             (buf, value) -> {
@@ -26,12 +27,14 @@ public record PlayerInfo(
                 buf.writeUtf(value.name);
                 ResourceKey.streamCodec(Registries.DIMENSION).encode(buf, value.dimension);
                 BlockPos.STREAM_CODEC.encode(buf, value.position);
+                buf.writeBoolean(value.mockTarget);
             },
             buf -> new PlayerInfo(
                     UUIDUtil.STREAM_CODEC.decode(buf),
                     buf.readUtf(),
                     ResourceKey.streamCodec(Registries.DIMENSION).decode(buf),
-                    BlockPos.STREAM_CODEC.decode(buf)
+                    BlockPos.STREAM_CODEC.decode(buf),
+                    buf.readBoolean()
             )
     );
 

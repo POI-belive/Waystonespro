@@ -11,10 +11,13 @@ import net.blay09.mods.waystones.api.WaystoneVisibility;
 import net.blay09.mods.waystones.worldgen.namegen.NameGenerationMode;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.StringRepresentable;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 
 @Config(Waystones.MOD_ID)
@@ -215,8 +218,8 @@ public class WaystonesConfig {
         @Comment("If enabled, the item held in hand will be consumed on teleport. Requires costItem to be set.")
         public boolean consumeItem = false;
 
-        @Comment("The item that must be held to teleport to another player. Leave empty to allow teleportation with any item.")
-        public ItemStack costItem = ItemStack.EMPTY;
+        @Comment("The item identifier that must be held to teleport to another player, for example \"minecraft:ender_pearl\". Leave empty to allow teleportation with any item.")
+        public String costItem = "";
 
         @Synced
         @Comment("If enabled, pets will be teleported with the player.")
@@ -225,6 +228,24 @@ public class WaystonesConfig {
         @Synced
         @Comment("If enabled, leashed mobs will be teleported with the player.")
         public boolean transportLeashed = true;
+
+        public Optional<Item> getCostItem() {
+            if (costItem == null || costItem.isBlank()) {
+                return Optional.empty();
+            }
+
+            final var itemId = Identifier.tryParse(costItem);
+            if (itemId == null) {
+                return Optional.empty();
+            }
+
+            final var item = BuiltInRegistries.ITEM.getValue(itemId);
+            if (item == null || item == Items.AIR) {
+                return Optional.empty();
+            }
+
+            return Optional.of(item);
+        }
     }
 
     public InventoryButtonMode getInventoryButtonMode() {

@@ -37,7 +37,7 @@ public class PlayerSelectionMenu extends AbstractContainerMenu {
      */
     public static PlayerSelectionMenu fromServerPlayers(MenuType<?> type, int windowId, List<ServerPlayer> serverPlayers) {
         List<PlayerInfo> playerInfos = serverPlayers.stream()
-                .map(p -> new PlayerInfo(p.getUUID(), p.getName().getString(), p.level().dimension(), p.blockPosition()))
+                .map(p -> new PlayerInfo(p.getUUID(), p.getName().getString(), p.level().dimension(), p.blockPosition(), false))
                 .collect(Collectors.toList());
         return new PlayerSelectionMenu(type, windowId, playerInfos);
     }
