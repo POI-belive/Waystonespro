@@ -27,6 +27,18 @@ neoForge {
             client()
         }
 
+        clientDev1 {
+            client()
+            gameDirectory = project.file('run-client-1')
+            programArguments = ['--username', 'Dev1']
+        }
+
+        clientDev2 {
+            client()
+            gameDirectory = project.file('run-client-2')
+            programArguments = ['--username', 'Dev2']
+        }
+
         server {
             server()
         }
